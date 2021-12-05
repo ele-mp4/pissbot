@@ -10,7 +10,7 @@ import yt_dlp as youtube_dl
 
 # // CONFIG \\
 
-TOKEN = open("pissbot_token.txt", "r").read()
+TOKEN = open("C:\\Users\\tt\\Desktop\\projects\\bots\\pissbot_token.txt", "r").read()
 GUILD = 916072511110803577
 MODERATORS = ["ele#9030", "page#2577", "vixel#4059"]
 QUEUE = []
