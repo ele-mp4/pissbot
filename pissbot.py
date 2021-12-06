@@ -135,6 +135,11 @@ async def dog(ctx):
     await ctx.send("https://media.discordapp.net/attachments/916075917648990219/916368839741161522/dog2.jpg")
 
 @bot.command()
+async def cat(ctx):
+    await ctx.send("https://media.discordapp.net/attachments/916075917648990219/917212236706095154/unknown.png?width=644&height=676")
+    await ctx.send("https://media.discordapp.net/attachments/916075917648990219/917212284781203506/E_2MssCVQAEr6gG.png?width=507&height=676")
+
+@bot.command()
 async def ss(ctx):
     await ctx.send("piss")
 
