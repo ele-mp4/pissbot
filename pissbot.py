@@ -67,15 +67,15 @@ async def play(ctx, url):
     if ctx.message.author.voice == None:
         await ctx.send("must be in a voice channel")
         return
+
+    if frozen:
+        return
     
     if voice_bot != None:
         if voice_bot.is_playing():
             await ctx.send("song is already playing, adding to queue")
             QUEUE.append(url)
             return
-
-    if frozen:
-        return
 
     if os.path.exists("song.mp3"):
         os.remove("song.mp3")
