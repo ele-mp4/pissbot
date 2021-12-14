@@ -12,7 +12,7 @@ import yt_dlp as youtube_dl
 
 TOKEN = open("C:\\Users\\tt\\Desktop\\projects\\bots\\pissbot_token.txt", "r").read()
 GUILD = 916072511110803577
-MODERATORS = ["ele#9030", "page#2577", "vixel#4059"]
+MODERATORS = [800087654791249942, 638579111035666457, 574952383780618240]
 QUEUE = []
 FFMPEG_PATH = "C:\\Users\\tt\\Desktop\\projects\\other\\ffmpeg-4.4-full_build\\bin\\ffmpeg.exe"
 
@@ -36,11 +36,15 @@ async def on_ready():
 
 @bot.command()
 async def say(ctx, *, text):
+    if ctx.message.author.id not in MODERATORS:
+        return
     await ctx.message.delete()
     await ctx.send(text)
 
 @bot.command()
 async def mute(ctx, id):
+    if ctx.message.author.id not in MODERATORS:
+        return
     user_id = re.sub('\D', '',id)
     user = await ctx.guild.fetch_member(user_id)
     role = discord.utils.get(ctx.guild.roles, id=916092636765499432)
@@ -49,11 +53,31 @@ async def mute(ctx, id):
 
 @bot.command()
 async def unmute(ctx, id):
+    if ctx.message.author.id not in MODERATORS:
+        return
     user_id = re.sub('\D', '',id)
     user = await ctx.guild.fetch_member(user_id)
     role = discord.utils.get(ctx.guild.roles, id=916092636765499432)
     await user.remove_roles(role)
     await ctx.send(f"successfully unmuted {user.mention}")
+
+@bot.command()
+async def stop(ctx):
+    if ctx.message.author.id not in MODERATORS:
+        return
+    if ctx.message.author.voice == None:
+        await ctx.send("must be in a voice channel")
+        return
+    member = ctx.guild.get_member(916132779043979264)
+    voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    await voice.disconnect()
+
+@bot.command()
+async def skip(ctx):
+    if ctx.message.author.id not in MODERATORS:
+        return
+    voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    voice.stop()
 
 # non-mod commands
 frozen = False
@@ -77,9 +101,6 @@ async def play(ctx, url):
             QUEUE.append(url)
             return
 
-    if os.path.exists("song.mp3"):
-        os.remove("song.mp3")
-
     await ctx.send("preparing to play song")
 
     print(url)
@@ -91,7 +112,7 @@ async def play(ctx, url):
         os.system(f'cd C:\\Users\\tt && spotdl {url.strip()} -o {os.path.dirname(os.path.abspath(__file__))} --ffmpeg "{FFMPEG_PATH}"')
     for file in os.listdir("./"):
             if file.endswith(".mp3"):
-                os.rename(file, "song.mp3")
+                os.replace(file, "song.mp3")
 
     member = ctx.guild.get_member(916132779043979264)
     try:
@@ -115,15 +136,6 @@ async def play(ctx, url):
         QUEUE.pop(0)
         await play(ctx, link)
         
-
-@bot.command()
-async def stop(ctx):
-    if ctx.message.author.voice == None:
-        await ctx.send("must be in a voice channel")
-        return
-    member = ctx.guild.get_member(916132779043979264)
-    voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
-    await voice.disconnect()
     
 @bot.command()
 async def queue(ctx):
