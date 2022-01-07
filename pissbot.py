@@ -1,10 +1,12 @@
 # page is the best
 
 import discord
+from discord.ext.commands.help import Paginator
 from discord.utils import get
 from discord.ext import commands
 import os
 import asyncio
+import requests
 import re
 import yt_dlp as youtube_dl
 
@@ -15,14 +17,15 @@ GUILD = 916072511110803577
 MODERATORS = [800087654791249942, 638579111035666457, 574952383780618240]
 QUEUE = []
 FFMPEG_PATH = "C:\\Users\\tt\\Desktop\\projects\\other\\ffmpeg-4.4-full_build\\bin\\ffmpeg.exe"
+Paused = False
 
 ydl_opts = {
-        'format': 'bestaudio/best',
-        'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '196',
-    }],
+        'format': 'bestaudio/best'
+        #'postprocessors': [{
+        #'key': 'FFmpegExtractAudio',
+        #'preferredcodec': 'mp3',
+        #'preferredquality': '196',
+    ,
 }
 
 intents = discord.Intents().all()
@@ -70,6 +73,8 @@ async def stop(ctx):
         return
     member = ctx.guild.get_member(916132779043979264)
     voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    global Paused
+    Paused = False
     await voice.disconnect()
 
 @bot.command()
@@ -77,12 +82,46 @@ async def skip(ctx):
     if ctx.message.author.id not in MODERATORS:
         return
     voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    global Paused
+    Paused = False
     voice.stop()
+
+@bot.command()
+async def pause(ctx):
+    if ctx.message.author.id not in MODERATORS:
+        return
+    voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if voice.is_paused == True:
+        await ctx.send("song is already paused!")
+        return
+    global Paused
+    Paused = True
+    voice.pause()
+    await ctx.send("paused!")
+
+@bot.command()
+async def resume(ctx):
+    if ctx.message.author.id not in MODERATORS:
+        return
+    voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    if voice.is_paused == False:
+        await ctx.send("song is already playing!")
+        return
+    global Paused
+    voice.resume()
+    Paused = False
+    await ctx.send("resumed!")
+
+@bot.command()
+async def debug(ctx, *, msg):
+    if ctx.message.author.id not in MODERATORS:
+        return
+    print(msg)
 
 # non-mod commands
 frozen = False
 @bot.command()
-async def play(ctx, url):
+async def play(ctx, *, url = ""):
     voice_bot = get(bot.voice_clients, guild=ctx.guild)
     global frozen
 
@@ -94,6 +133,12 @@ async def play(ctx, url):
 
     if frozen:
         return
+
+    if ctx.message.attachments: # if attachment exists
+        url = str(ctx.message.attachments[0])
+
+    if url == "":
+        await ctx.send("need a link or a file attachment!")
     
     if voice_bot != None:
         if voice_bot.is_playing():
@@ -106,13 +151,37 @@ async def play(ctx, url):
     print(url)
     frozen = True
     if "youtube.com" in url:
+        print("J")
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+    elif "bandcamp.com" in url:
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
     elif "spotify.com" in url:
         os.system(f'cd C:\\Users\\tt && spotdl {url.strip()} -o {os.path.dirname(os.path.abspath(__file__))} --ffmpeg "{FFMPEG_PATH}"')
+    elif "youtu.be" in url:
+        new_url = url.split(".be/")[1]
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([new_url])
+    elif "cdn.discordapp.com" in url:
+        r = requests.get(url, allow_redirects=True) 
+        open('bfsdfsdhf.webm', 'wb').write(r.content)
+    else:
+        await ctx.send("looking for youtube video...")
+        r = requests.get("https://www.youtube.com/results?search_query=" + url)
+        video_ids = re.findall(r"watch\?v=(\S{11})", r.text)
+        url = "https://www.youtube.com/watch?v=" + video_ids[0]
+        await ctx.send(f"found video {url}, preparing to play now!")
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
     for file in os.listdir("./"):
-            if file.endswith(".mp3"):
-                os.replace(file, "song.mp3")
+            print(file)
+            if file.endswith(".webm"):
+                os.replace(file, "song.webm")
+            elif file.endswith(".mp3"):
+                os.replace(file, "song.webm")
+            elif file.endswith(".m4a"):
+                os.replace(file, "song.webm")
 
     member = ctx.guild.get_member(916132779043979264)
     try:
@@ -125,10 +194,11 @@ async def play(ctx, url):
     await voiceChannel.connect()
     voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
 
-    voice.play(discord.FFmpegPCMAudio("song.mp3"))
+    voice.play(discord.FFmpegPCMAudio("song.webm"))
     frozen = False
+    global Paused
 
-    while voice.is_playing():
+    while voice.is_playing() or Paused:
         await asyncio.sleep(1)
     await voice.disconnect()
     if QUEUE: # if it's not empty
@@ -154,5 +224,18 @@ async def cat(ctx):
 @bot.command()
 async def ss(ctx):
     await ctx.send("piss")
+
+
+"""
+@bot.event
+async def on_member_update(before, after):
+    print(before.nick)
+    if "page" in str(before):
+        await after.edit(nick="silly page")
+        return
+    elif "RoboticFade" in str(before):
+        await after.edit(nick="mink")
+        return
+"""
 
 bot.run(TOKEN)
