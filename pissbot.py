@@ -1,7 +1,7 @@
 # page is the best
 
 import discord
-from discord.ext.commands.help import Paginator
+from discord.ext.commands.help import Paginator # (page reference)
 from discord.utils import get
 from discord.ext import commands
 import os
@@ -203,13 +203,24 @@ async def play(ctx, *, url = ""):
     await voice.disconnect()
     if QUEUE: # if it's not empty
         link = QUEUE[0]
+        print(link)
         QUEUE.pop(0)
-        await play(ctx, link)
+        await play(ctx=ctx, url=link)
         
     
 @bot.command()
 async def queue(ctx):
-    await ctx.send(QUEUE)
+    if not QUEUE:
+        await ctx.send("nothing in queue :rolling_eyes:")
+        return
+    final_string = "```// QUEUE \\\ \n\n"
+    index = 0
+    for i in QUEUE:
+        index += 1
+        final_string += f"{str(index)}. {str(i)}" + "\n"
+
+    final_string += "\n```"
+    await ctx.send(final_string)
 
 @bot.command()
 async def dog(ctx):
