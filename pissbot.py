@@ -41,6 +41,7 @@ song_title = ""
 
 intents = discord.Intents().all()
 bot = commands.Bot(command_prefix=["p!", "P!"], intents=intents, case_insensitive=True)
+bot.remove_command("help")
 
 @bot.event
 async def on_ready():
@@ -65,7 +66,7 @@ async def mute(ctx, id):
 
 @bot.command(brief="[MOD ONLY] - unmutes someone")
 @commands.has_permissions(administrator=True)
-async def unmute(ctx, id):
+async def unmute(ctx, id): # no
     user_id = re.sub('\D', '',id)
     user = await ctx.guild.fetch_member(user_id)
     role = discord.utils.get(ctx.guild.roles, id=916092636765499432)
@@ -302,6 +303,28 @@ async def cat(ctx):
 async def ss(ctx):
     await ctx.send("piss")
 
+@bot.command(brief="lists all commands")
+async def help(ctx):
+    helptext = "```\n NON-MOD COMMANDS:\n"
+
+    for command in bot.commands:
+        if "[MOD ONLY]" in command.brief:
+            continue
+        helptext+=f"    {command} - {command.brief}\n"
+
+    helptext+="\n MOD-COMMANDS:\n"
+    
+    for command in bot.commands:
+        if not "[MOD ONLY]" in command.brief:
+            continue
+        cleared_command = command.brief.replace("[MOD ONLY] - ", "")
+        helptext+=f"    {command} - {cleared_command}\n"
+
+    helptext+="\n\nPREFIX: p!"
+
+    helptext+="```"
+    await ctx.send(helptext)
+
 @bot.command(aliases=["av"], brief="gets someone's avatar")
 async def avatar(ctx, id):
     user_id = re.sub('\D', '',id)
@@ -394,7 +417,7 @@ async def on_message_edit(before_message: discord.Message, after_message: discor
     embed.add_field(name="after", value=f"{after_message.content}", inline=False)
 
     now = datetime.datetime.now(tz=TIMEZONE)
-    time = now.strftime("%m/%d/%Y, %I:%M %p")
+    time = now.strftime("%m/%d/%Y, %I:%M %p") # WEEEED I LOVE WEED #BLAZEIT
 
     embed.add_field(name=f"info", value=f"ID: {after_message.id} • {time}", inline=False)
 
