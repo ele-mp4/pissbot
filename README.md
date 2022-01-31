@@ -1,2 +1,2 @@
 # pissbot
- pissy music bot
+ silly music and moderation bot
