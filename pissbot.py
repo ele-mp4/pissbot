@@ -3,6 +3,7 @@
 import discord
 import time
 import pytube
+import datetime
 from discord.ext.commands.help import Paginator # (page reference)
 from discord.utils import get
 from discord.ext import commands
@@ -13,6 +14,7 @@ import asyncio
 import requests
 import re
 import yt_dlp as youtube_dl
+import pytz
 
 # // CONFIG \\
 
@@ -20,6 +22,7 @@ TOKEN = open("C:\\Users\\tt\\Desktop\\projects\\bots\\pissbot_token.txt", "r").r
 GUILD = 916072511110803577
 LOGS_CHANNEL = 916081066119405598
 QUEUE = []
+TIMEZONE = pytz.timezone("Europe/Warsaw")
 FFMPEG_PATH = "C:\\Users\\tt\\Desktop\\projects\\other\\ffmpeg-4.4-full_build\\bin\\ffmpeg.exe"
 
 ydl_opts = {
@@ -43,13 +46,11 @@ bot = commands.Bot(command_prefix=["p!", "P!"], intents=intents, case_insensitiv
 async def on_ready():
     print(f'{bot.user.name} has connected to Discord!')
 
-# mod commands
+# // MOD COMMANDS \\
 
 @bot.command(brief="[MOD ONLY] - makes the bot say something :)")
 @commands.has_permissions(administrator=True)
 async def say(ctx, *, text):
-    #if ctx.message.author.id not in MODERATORS:
-    #    return
     await ctx.message.delete()
     await ctx.send(text)
 
@@ -71,16 +72,20 @@ async def unmute(ctx, id):
     await user.remove_roles(role)
     await ctx.send(f"successfully unmuted {user.mention}")
 
-@bot.command(aliases=["st"], brief="[MOD ONLY] - completely stops a song")
+@bot.command(aliases=["clearq", "cq"], brief="[MOD ONLY] - clears the queue and stops the current song playing")
 @commands.has_permissions(administrator=True)
-async def stop(ctx):
+async def clearqueue(ctx):
     if ctx.message.author.voice == None:
         await ctx.send("must be in a voice channel")
         return
     member = ctx.guild.get_member(916132779043979264)
     voice = discord.utils.get(bot.voice_clients, guild=ctx.guild)
     global paused
+    global song_title
     paused = False
+    song_title = ""
+    QUEUE.clear()
+    await ctx.send("cleared songs from queue")
     await voice.disconnect()
 
 @bot.command(aliases=["sk"], brief="[MOD ONLY] - skips to the next song in queue")
@@ -135,6 +140,9 @@ def index_in_list(a_list, index):
 @bot.command(aliases=["rq", "removeq"], brief="[MOD ONLY] - deletes a song from the queue by using the song's queue position")
 @commands.has_permissions(administrator=True)
 async def removequeue(ctx, queue_position):
+    if ctx.message.author.voice == None:
+        await ctx.send("must be in a voice channel")
+        return
     print(queue_position)
     print(int(queue_position) - 1)
     if index_in_list(QUEUE, int(queue_position) - 1) == False or not QUEUE:
@@ -148,7 +156,7 @@ async def removequeue(ctx, queue_position):
 async def purge(ctx, limit: int):
     await ctx.channel.purge(limit=limit+1)
 
-# non-mod commands
+# // NON-MOD COMMANDS \\ 
 frozen = False
 @bot.command(aliases=["pl"], brief="plays a song (link or song search on youtube)", description="plays a song from either a youtube, bandcamp, spotify or file attachment. you can also type in the name of a song.")
 async def play(ctx, *, url = ""):
@@ -174,15 +182,23 @@ async def play(ctx, *, url = ""):
     
     if voice_bot != None:
         if voice_bot.is_playing():
-            await ctx.send("song is already playing, adding to queue")
-            QUEUE.append(url)
-            return
+            if not "youtube.com" in url and not "&list" in url:
+                await ctx.send("song is already playing, adding to queue")
+                QUEUE.append(url)
+                return
+            else:
+                playlist = pytube.Playlist(url)
+                playlist._video_regex = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
+                for url in playlist.video_urls:
+                    QUEUE.append(url)
+                await ctx.send("song is already playing, added songs from playlist to queue")
+                return
 
     await ctx.send("preparing to play song")
 
     print(url)
     frozen = True
-    if "youtube.com" in url:
+    if "youtube.com" in url and not "&list" in url:
         print("J")
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -203,6 +219,18 @@ async def play(ctx, *, url = ""):
         r = requests.get(url, allow_redirects=True) 
         open('bfsdfsdhf.webm', 'wb').write(r.content)
         song_title = "couldn't get title!"
+    elif "youtube.com" in url and "&list" in url:
+        print("O")
+        playlist = pytube.Playlist(url)
+        playlist._video_regex = re.compile(r"\"url\":\"(/watch\?v=[\w-]*)")
+        for url in playlist.video_urls:
+            if url == playlist.video_urls[0]:
+                continue
+            QUEUE.append(url)
+
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([playlist.video_urls[0]])
+        song_title = pytube.YouTube(playlist.video_urls[0]).title
     else:
         await ctx.send("looking for youtube video...")
         r = requests.get("https://www.youtube.com/results?search_query=" + url)
@@ -274,7 +302,50 @@ async def cat(ctx):
 async def ss(ctx):
     await ctx.send("piss")
 
-# other
+@bot.command(aliases=["av"], brief="gets someone's avatar")
+async def avatar(ctx, id):
+    user_id = re.sub('\D', '',id)
+    user = await ctx.guild.fetch_member(user_id)
+    await ctx.send(user.avatar_url)
+
+@bot.command(brief="lists the amount of members in the server")
+async def membercount(ctx):
+    embed = discord.Embed()
+    embed.colour = (0x2163b5)
+    embed.title = f"member count"
+
+    embed.add_field(name="including bots", value=f"{ctx.guild.member_count}", inline=False)
+    embed.add_field(name="without bots", value=f"{len([m for m in ctx.guild.members if not m.bot])}")
+
+    await ctx.send(embed=embed)
+
+@bot.command(brief="gets info of a user")
+async def whois(ctx, member):
+    user_id = re.sub('\D', '',member)
+    member = await ctx.guild.fetch_member(user_id)
+
+    embed = discord.Embed()
+    embed.colour = (0x2163b5)
+    embed.title = f""
+    embed.set_thumbnail(url=member.avatar_url)
+    embed.set_author(name=f"{member}", icon_url=f"{member.avatar_url}")
+
+    joined_at = member.joined_at.strftime("%m/%d/%Y\n%I:%M %p UTC")
+    embed.add_field(name="joined", value=joined_at, inline=True)
+    registered_at = member.created_at.strftime("%m/%d/%Y\n%I:%M %p UTC")
+    embed.add_field(name="registered", value=registered_at, inline=True)
+    status = "server member"
+
+    yassiest = discord.utils.get(ctx.guild.roles, name="yassiest")
+    if yassiest in member.roles:
+        status = "server owner"
+    embed.add_field(name="status", value=status, inline=False)
+
+    await ctx.send(embed=embed)
+
+
+
+# // OTHER \\
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -283,7 +354,7 @@ async def on_command_error(ctx, error):
     else:
         raise error
 
-# log module
+# // LOG MODULE \\
 
 @bot.event
 async def on_message_delete(message: discord.Message):
@@ -300,10 +371,9 @@ async def on_message_delete(message: discord.Message):
     if message.attachments:
         embed.set_image(url=message.attachments[0].proxy_url)
 
-    xd = str(message.created_at.time()).split(":") # i didnt know what to name this but its basically for making the string maniuplation more organized
-    hour = str(int(xd[0]) + 1) + ":" + xd[1] + " AM"
-
-    embed.add_field(name=f"info", value=f"ID: {message.id} • {message.created_at.month}/{message.created_at.day}/{message.created_at.year} {hour}", inline=False)
+    now = datetime.datetime.now(tz=TIMEZONE)
+    time = now.strftime("%m/%d/%Y, %I:%M %p")
+    embed.add_field(name=f"info", value=f"ID: {message.id} • {time}", inline=False)
     
 
     channel = bot.get_channel(LOGS_CHANNEL)
@@ -311,6 +381,10 @@ async def on_message_delete(message: discord.Message):
 
 @bot.event
 async def on_message_edit(before_message: discord.Message, after_message: discord.Message):
+    if before_message == None or after_message == None:
+        return
+    if before_message.content == after_message.content:
+        return
     embed = discord.Embed()
     embed.colour = (0x6f40ad)
     embed.title = f"message sent by {before_message.author} edited in #{before_message.channel}"
@@ -319,24 +393,89 @@ async def on_message_edit(before_message: discord.Message, after_message: discor
     embed.add_field(name="before", value=f"{before_message.content}", inline=False)
     embed.add_field(name="after", value=f"{after_message.content}", inline=False)
 
-    xd = str(after_message.edited_at.time()).split(":") # i didnt know what to name this but its basically for making the string maniuplation more organized
-    hour = str(int(xd[0]) + 1) + ":" + xd[1] + " AM"
+    now = datetime.datetime.now(tz=TIMEZONE)
+    time = now.strftime("%m/%d/%Y, %I:%M %p")
 
-    embed.add_field(name=f"info", value=f"ID: {after_message.id} • {after_message.edited_at.month}/{after_message.edited_at.day}/{after_message.edited_at.year} {hour}", inline=False)
+    embed.add_field(name=f"info", value=f"ID: {after_message.id} • {time}", inline=False)
 
     channel = bot.get_channel(LOGS_CHANNEL)
     await channel.send(embed=embed)
 
-"""
+@bot.event
+async def on_invite_create(invite: discord.Invite):
+    embed = discord.Embed()
+    embed.colour = (0x2163b5)
+    embed.title = f"invited created by {invite.inviter} in #{invite.channel}"
+
+    embed.set_author(name=f"{invite.inviter}", icon_url=f"{invite.inviter.avatar_url}")
+    max_uses = invite.max_uses
+    if max_uses == 0:
+        max_uses = "no limit"
+    embed.add_field(name="invite info", value=f"URL: {invite.url}\n expires: {str(datetime.timedelta(seconds=invite.max_age))}\n used: {invite.uses} times\n max uses: {max_uses}\n temporary: {str(invite.temporary)}", inline=False)
+
+    now = datetime.datetime.now(tz=TIMEZONE)
+    time = now.strftime("%m/%d/%Y, %I:%M %p")
+
+    embed.add_field(name=f"info", value=f"ID: {invite.id} • {time}", inline=False)
+
+    channel = bot.get_channel(LOGS_CHANNEL)
+    await channel.send(embed=embed)
+
 @bot.event
 async def on_member_update(before, after):
-    print(before.nick)
-    if "page" in str(before):
-        await after.edit(nick="silly page")
+    if before.nick == after.nick:
         return
-    elif "RoboticFade" in str(before):
-        await after.edit(nick="mink")
-        return
-"""
+    embed = discord.Embed()
+    embed.colour = (0x2163b5)
+    embed.title = f"member {before} changed their nickname"
+
+    embed.set_author(name=f"{after}", icon_url=f"{after.avatar_url}")
+    embed.add_field(name="before", value=f"{before.nick}", inline=False)
+    embed.add_field(name="after", value=f"{after.nick}", inline=False)
+
+    now = datetime.datetime.now(tz=TIMEZONE)
+    time = now.strftime("%m/%d/%Y, %I:%M %p")
+
+    embed.add_field(name=f"info", value=f"ID: {after.id} • {time}", inline=False)
+
+    channel = bot.get_channel(LOGS_CHANNEL)
+    await channel.send(embed=embed)
+
+@bot.event
+async def on_member_join(member):
+    embed = discord.Embed()
+    embed.colour = (0x6dbf39)
+    embed.title = f"{member}"
+    embed.set_thumbnail(url=member.avatar_url)
+
+    time1 = member.created_at.strftime("%m/%d/%Y, %I:%M %p UTC")
+
+    embed.set_author(name=f"member joined", icon_url=f"{member.avatar_url}")
+    embed.add_field(name="account created", value=f"{time1}", inline=False)
+
+    now = datetime.datetime.now(tz=TIMEZONE)
+    time = now.strftime("%m/%d/%Y, %I:%M %p")
+
+    embed.add_field(name=f"info", value=f"ID: {member.id} • {time}", inline=False)
+
+    channel = bot.get_channel(LOGS_CHANNEL)
+    await channel.send(embed=embed)
+
+@bot.event
+async def on_member_remove(member):
+    embed = discord.Embed()
+    embed.colour = (0xa8323a)
+    embed.title = f"{member}"
+    embed.set_thumbnail(url=member.avatar_url)
+
+    embed.set_author(name=f"member left", icon_url=f"{member.avatar_url}")
+
+    now = datetime.datetime.now(tz=TIMEZONE)
+    time = now.strftime("%m/%d/%Y, %I:%M %p")
+
+    embed.add_field(name=f"info", value=f"ID: {member.id} • {time}", inline=False)
+
+    channel = bot.get_channel(LOGS_CHANNEL)
+    await channel.send(embed=embed)
 
 bot.run(TOKEN)
