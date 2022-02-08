@@ -7,8 +7,8 @@ import datetime
 from discord.ext.commands.help import Paginator # (page reference)
 from discord.utils import get
 from discord.ext import commands
-from discord import Member
-from discord.ext.commands import has_permissions, MissingPermissions
+from discord.ext.commands import MissingPermissions
+from weatherapi import City
 import os
 import asyncio
 import requests
@@ -19,6 +19,8 @@ import pytz
 # // CONFIG \\
 
 TOKEN = open("C:\\Users\\tt\\Desktop\\projects\\bots\\pissbot_token.txt", "r").read()
+WEATHER_KEY = open("C:\\Users\\tt\\Desktop\\projects\\bots\\weather_key.txt", "r").read()
+IQAIR_KEY = open("C:\\Users\\tt\\Desktop\\projects\\bots\\iqair_key.txt", "r").read()
 GUILD = 916072511110803577
 LOGS_CHANNEL = 916081066119405598
 QUEUE = []
@@ -157,6 +159,11 @@ async def removequeue(ctx, queue_position):
 async def purge(ctx, limit: int):
     await ctx.channel.purge(limit=limit+1)
 
+#@bot.command(brief="[MOD ONLY] - forcefully stops current song playing and plays another song without affecting the queue")
+#@commands.has_permissions(administrator=True)
+#async def forceplay(ctx, limit: int):
+#    await ctx.channel.purge(limit=limit+1)
+
 # // NON-MOD COMMANDS \\ 
 frozen = False
 @bot.command(aliases=["pl"], brief="plays a song (link or song search on youtube)", description="plays a song from either a youtube, bandcamp, spotify or file attachment. you can also type in the name of a song.")
@@ -195,7 +202,8 @@ async def play(ctx, *, url = ""):
                 await ctx.send("song is already playing, added songs from playlist to queue")
                 return
 
-    await ctx.send("preparing to play song")
+    
+    message = await ctx.send("preparing to play song")
 
     print(url)
     frozen = True
@@ -233,11 +241,11 @@ async def play(ctx, *, url = ""):
             ydl.download([playlist.video_urls[0]])
         song_title = pytube.YouTube(playlist.video_urls[0]).title
     else:
-        await ctx.send("looking for youtube video...")
+        await message.edit(content="looking for youtube video...")
         r = requests.get("https://www.youtube.com/results?search_query=" + url)
         video_ids = re.findall(r"watch\?v=(\S{11})", r.text)
         url = "https://www.youtube.com/watch?v=" + video_ids[0]
-        await ctx.send(f"found video {url}, preparing to play now!")
+        await message.edit(content=f"found video {url}, preparing to play now!")
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         song_title = pytube.YouTube(url).title
@@ -256,7 +264,10 @@ async def play(ctx, *, url = ""):
         await member.move_to(None)
     except discord.ext.commands.errors.CommandInvokeError:
         print("Error disconnecting, already connected to a voice channel.")
-    await ctx.send("playing song")
+    if song_title != "couldn't get title!":
+        await message.edit(content=f"playing {song_title}")
+    else:
+        await message.edit(content=f"playing audio")
 
     voiceChannel = discord.utils.get(ctx.guild.voice_channels)
     await voiceChannel.connect()
@@ -266,6 +277,7 @@ async def play(ctx, *, url = ""):
     frozen = False
 
     while voice.is_playing() or paused:
+        print('dsdsd')
         await asyncio.sleep(1)
     await voice.disconnect()
     if QUEUE: # if it's not empty
@@ -305,14 +317,14 @@ async def ss(ctx):
 
 @bot.command(brief="lists all commands")
 async def help(ctx):
-    helptext = "```\n NON-MOD COMMANDS:\n"
+    helptext = "```\nNON-MOD COMMANDS:\n"
 
     for command in bot.commands:
         if "[MOD ONLY]" in command.brief:
             continue
         helptext+=f"    {command} - {command.brief}\n"
 
-    helptext+="\n MOD-COMMANDS:\n"
+    helptext+="\nMOD COMMANDS:\n"
     
     for command in bot.commands:
         if not "[MOD ONLY]" in command.brief:
@@ -366,7 +378,34 @@ async def whois(ctx, member):
 
     await ctx.send(embed=embed)
 
+@bot.command(brief="gets weather info of a city using the openweathermap and IQAir API")
+async def weather(ctx, *, city):
+    try:
+        city_obj = City(city, WEATHER_KEY)
+    except IndexError:
+        await ctx.send("failed to find city!")
+        return
+    info_F = city_obj.Weather("F", WEATHER_KEY)
+    info_C = city_obj.Weather("C", WEATHER_KEY)
+    pollution = city_obj.Pollution(IQAIR_KEY)
+    embed = discord.Embed()
+    embed.colour = (0x2163b5)
+    if city_obj.state:
+        embed.title = f"weather in {city_obj.name}, {city_obj.state}, {city_obj.country} at {city_obj.time}"
+    else:
+        embed.title = f"weather in {city_obj.name}, {city_obj.country}"
 
+    embed.add_field(name="temperature", value=f"temp: {info_C.temperature}C, {info_F.temperature}F\nfeels like: {info_C.feelslike}C, {info_F.feelslike}F", inline=False)
+    embed.add_field(name="sky", value=info_C.clouds.lower(), inline=True)
+    embed.add_field(name="humidity", value=info_C.humidity, inline=True)
+    embed.add_field(name="pressure", value=info_C.pressure, inline=True)
+    embed.add_field(name="wind speed", value=info_C.windspeed+", "+info_F.windspeed, inline=True)
+    embed.add_field(name="air pollution", value=str(pollution.aqi)+"AQI", inline=True)
+    embed.add_field(name="air quality", value=str(pollution.airquality), inline=True)
+
+    #embed.add_field(name="registered", value=registered_at, inline=True)
+
+    await ctx.send(embed=embed)
 
 # // OTHER \\
 
@@ -408,6 +447,8 @@ async def on_message_edit(before_message: discord.Message, after_message: discor
         return
     if before_message.content == after_message.content:
         return
+    print(before_message.content)
+    print(after_message.content)
     embed = discord.Embed()
     embed.colour = (0x6f40ad)
     embed.title = f"message sent by {before_message.author} edited in #{before_message.channel}"
